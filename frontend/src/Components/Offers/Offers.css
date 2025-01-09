@@ -1,0 +1,118 @@
+.offers{
+    width: 65%;
+    height: 60vh;
+    display: flex;
+    margin: auto;
+    padding: 100px;
+    margin-bottom: 50px;
+    margin-top: 60px;
+    background: linear-gradient(180deg, #c3a1cf 0%, #e1ffea22 60%);
+
+}
+
+.offers-right img{
+    width: 400px;
+}
+
+.offers-left{
+    flex:1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.offers-left h1{
+    color: #171717;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    font-size: 55px;
+    font-weight: 600;
+}
+
+.offers-left p{
+    color: #171717;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    font-size: 22px;
+    padding-top: 10px;
+}
+
+.offers-left button{
+    width: 200px;
+    height: 60px;
+    background: #a23d4e;
+    border-radius: 35px;
+    border: none;
+    color: white;
+    font-size: 15px;
+    font-weight: 500;
+    margin-top: 30px;
+    cursor: pointer;
+} 
+
+.offers-right{
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+@media (max-width: 1024px) {
+    .offers {
+        height: 40vh;
+    }
+
+    .offers-left h1 {
+        font-size: 40px;
+        padding-top: 10px;
+        line-height: 1;
+    }
+
+    .offers-left p {
+        font-size: 18px;
+        padding-top: 5px;
+    }
+
+    .offers-left button {
+        width: 200px;
+        height: 50px;
+        font-size: 16px;
+    }
+
+    .offers-right img {
+        width: 120%;
+    }
+}
+
+@media (min-width: 360px) and (max-width: 720px){
+    .offers {
+        flex-direction: column;
+        text-align: center;
+        padding: 0px 20px;
+        height: 90vh;
+    }
+
+    .offers-left {
+        padding-left: 0;
+        align-items: center;
+        line-height: 1;
+        padding-top: 40px;
+    }
+
+    .offers-left h1 {
+        font-size: 40px;
+    }
+
+    .offers-left p {
+        padding-top: 25px;
+        font-size: 14px;
+    }
+
+    .offers-left button {
+        width: 120px;
+        height: 40px;
+        font-size: 12px;
+    }
+
+    .offers-right img {
+        width: 100%;
+    }
+}
