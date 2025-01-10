@@ -1,4 +1,5 @@
-const port = 4000;
+require('dotenv').config();
+const port = process.env.PORT || 4000;
 const express = require('express');
 const app = express();
 const mongoose = require('mongoose');
@@ -6,12 +7,19 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const cors = require('cors');
+const bcrypt = require('bcrypt');
+
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: process.env.FRONTEND_URL || '*',
+    methods: ['GET', 'POST', 'DELETE', 'UPDATE', 'PUT', 'PATCH']
+  }));
 
 // Database connection with MongoDB
-mongoose.connect("mongodb+srv://badarhianne:JungDimpswonG04@cluster0.osvyf.mongodb.net/onlinestorefront")
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.error('Could not connect to MongoDB', err));
 
 // API creation
 
@@ -19,27 +27,45 @@ app.get("/", (req, res) => {
     res.send("Express App is running");
 })
 
-
-// Image Storage Engine
-
-const storage = multer.diskStorage({
-    destination: './upload/images',
-    filename: (req, file, cb) => {
-        return cb(null, `${file.fieldname}_${Date.now()}_${path.extname(file.originalname)}`)
-    }
-})
-
-
-const upload = multer({ storage: storage});
-
-// Creating upload endpoint for images
-app.use('/images', express.static('upload/images'))
-app.post("/upload", upload.single('product'), (req, res) => {
-    res.json({
-        success: 1,
-        image_url: `http://localhost:${port}/images/${req.file.filename}`,
-    });
+// Cloudinary configuration
+const cloudinary = require('cloudinary').v2;
+cloudinary.config({ 
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
+    api_key: process.env.CLOUDINARY_API_KEY, 
+    api_secret: process.env.CLOUDINARY_API_SECRET 
 });
+
+// Multer configuration for Cloudinary
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+// Upload endpoint
+app.post("/upload", upload.single('product'), async (req, res) => {
+    try {
+        const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+                { folder: "products" },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result);
+                }
+            );
+            stream.end(req.file.buffer);
+        });
+
+        res.json({
+            success: 1,
+            image_url: result.secure_url,
+        });
+    } catch (error) {
+        console.error('Upload error:', error);
+        res.status(500).json({
+            success: 0,
+            message: "Error uploading image",
+        });
+    }
+});
+
 
 // Schema for products
 const Product = mongoose.model('Product',{
@@ -78,31 +104,28 @@ const Product = mongoose.model('Product',{
 })
 
 app.post("/addproduct", async (req, res) => {
+  try {
     let products = await Product.find({});
-    let id;
-    if(products.length > 0) {
-        let last_product_array = products.slice(-1);
-        let last_product = last_product_array[0];
-        id = last_product.id + 1;
-    } 
-    else {
-        id = 1;
-    }
+    let id = products.length > 0 ? products[products.length - 1].id + 1 : 1;
     const product = new Product({
-        id: id,
-        name: req.body.name,
-        image: req.body.image,
-        category: req.body.category,
-        new_price: req.body.new_price,
-        old_price: req.body.old_price,
+      id: id,
+      name: req.body.name,
+      image: req.body.image,
+      category: req.body.category,
+      new_price: req.body.new_price,
+      old_price: req.body.old_price,
     });
-    console.log(product);
     await product.save();
-    console.log("Saved");
     res.json({ 
-        success: true, 
-        name: req.body.name,
-    })
+      success: true, 
+      name: req.body.name,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error adding product",
+    });
+  }
 })
 
 // Creating API for deleting a product
@@ -150,53 +173,67 @@ const Users = mongoose.model('Users',{
 
 // Crating endpoint for registering new users
 app.post('/signup', async (req, res) => {
-    let check = await Users.findOne({email: req.body.email});
-    if (check) {
-        return res.status(400).json({success: 'false', errors: "Email already exists"});
-    }
-    let cart = {};
-    for (let i = 0; i < 300; i++) {
-        cart[i]=0;
-    }
-    const user = new Users({
-        name: req.body.username,
-        email: req.body.email,
-        password: req.body.password,
-        cartData: cart,
-    })
-    await user.save();
-
-    const data = {
-        user:{
-            id: user.id,
+    try {
+        let check = await Users.findOne({email: req.body.email});
+        if (check) {
+            return res.status(400).json({success: false, errors: "Email already exists"});
         }
+        
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(req.body.password, salt);
+        
+        let cart = {};
+        for (let i = 0; i < 300; i++) {
+            cart[i] = 0;
+        }
+        
+        const user = new Users({
+            name: req.body.username,
+            email: req.body.email,
+            password: hashedPassword,
+            cartData: cart,
+        });
+        await user.save();
+
+        const data = {
+            user: {
+                id: user.id,
+            }
+        }
+        const token = jwt.sign(data, process.env.JWT_SECRET);
+        res.json({success: true, token})
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).json({success: false, errors: "Server error"});
     }
-    const token = jwt.sign(data, "secret_ecom");
-    res.json({success: true, token})
-})
+});
 
 //Crate endpoint for user login
 app.post('/login', async (req, res) => {
-    let user = await Users.findOne({email: req.body.email});
-    if (user) {
-        const passCompare = req.body.password === user.password;
+    try {
+        let user = await Users.findOne({email: req.body.email});
+        if (!user) {
+            return res.status(400).json({success: false, errors: "User not found"});
+        }
+        
+        const passCompare = await bcrypt.compare(req.body.password, user.password);
         if (passCompare) {
             const data = {
-                user:{
+                user: {
                     id: user.id,
                 }
             }
-            const token = jwt.sign(data, "secret_ecom");
+            const token = jwt.sign(data, process.env.JWT_SECRET);
             res.json({success: true, token})
+        } else {
+            res.status(400).json({success: false, errors: "Incorrect password"});
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({success: false, errors: "Server error"});
     }
-    else{
-        res.json({success: false, errors: "Incorrect password"});
-    }
-    }
-    else {
-        res.json({success: false, errors: "User not found"});
-    }
-})
+});
+
 
 //Creating endpoint for newcollection data
 app.get('/newcollections', async (req, res) => {
@@ -215,19 +252,17 @@ app.get('/popularmerch', async (req, res) => {
 })
 
 //creating middleware to fetch user
-const fetchUser=async (req, res, next) => {
+const fetchUser = async (req, res, next) => {
     const token = req.header('auth-token');
     if (!token) {
-        res.status(401).send({errors: 'Please authenticate using valid token'});
+        return res.status(401).json({errors: 'Please authenticate using a valid token'});
     }
-    else{
-        try {
-            const data =jwt.verify(token, "secret_ecom");
-            req.user = data.user;
-            next();
-        } catch (error) {
-            res.status(401).send({errors: 'Please authenticate using valid token'});
-        }
+    try {
+        const data = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = data.user;
+        next();
+    } catch (error) {
+        res.status(401).json({errors: 'Please authenticate using a valid token'});
     }
 }
 
@@ -258,13 +293,10 @@ app.post('/getcart', fetchUser, async (req, res) => {
 })
 
 
-app.listen(port,(error) => {
+app.listen(port, (error) => {
     if (!error) {
         console.log("Server is running on port", port);
-    }
-    else 
-    {
+    } else {
         console.log("Error starting server:", error);
     }
-})
-
+});
